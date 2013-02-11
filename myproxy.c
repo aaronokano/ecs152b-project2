@@ -24,6 +24,7 @@ void error( const char *msg, int code ) {
   exit( code );
 }
 
+/* NOT DONE YET! */
 struct addrinfo parse_server( char *request ) {
   struct addrinfo hints, *res; /* For use with getaddrinfo */
   char *server;
