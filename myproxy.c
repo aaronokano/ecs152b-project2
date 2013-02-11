@@ -17,6 +17,7 @@
 #define ERROR_PIPE   5
 #define ERROR_FORK   6
 #define ERROR_GAI    7
+#define ERROR_MALFORMED 8
 
 /* Generic print error and quit */
 void error( const char *msg, int code ) {
@@ -24,31 +25,76 @@ void error( const char *msg, int code ) {
   exit( code );
 }
 
-/* NOT DONE YET! */
-struct addrinfo parse_server( char *request ) {
+char *get_request_line( char *request ) {
+  char *request_line;
+  int req_line_len;
+  if( (req_line_len = strcspn( request, "\r\n" )) == strlen( request ) )
+    error( "Improper HTTP request!", ERROR_MALFORMED );
+  request_line = (char *) malloc( req_line_len + 1 );
+  bzero( request_line, req_line_len + 1 );
+  memcpy( request_line, request, req_line_len );
+  return request_line;
+}
+
+struct addrinfo *parse_url( char *url, char **path ) {
+  /* url should contain a URL and the absolute path should be returned in
+   * path. The return value of the function will be an addrinfo struct with
+   * information about the web server */
   struct addrinfo hints, *res; /* For use with getaddrinfo */
-  char *server;
+  char *p;
+  char *server, *s;
+  *path = malloc( 65535 );
+  char *port;
   
   bzero( (char *) &hints, sizeof( hints ) );
   hints.ai_socktype = SOCK_STREAM;
   hints.ai_family = PF_INET;
 
-  if( getaddrinfo( server, 80, &hints, &res ) != 0 )
-    error( "getaddrinfo failed!", ERROR_GAI );
+  /* Parsing will break down URL specified by
+   * proto://host[:port]path, where path begins with a /
+   * Note that the hostname MUST be present, as we will be closing the
+   * connection to the server as soon as a response is received */
 
+  /* Skip over proto field */
+  if( (p = strchr( url, '/' )) == NULL)
+    error("Invalid URL!", ERROR_MALFORMED);
+  if( *(++p) != '/' )
+    error("Invalid URL!", ERROR_MALFORMED);
+  p++;
+  server = (char*)malloc( strcspn( p, "/" ) + 1 );
+  s = server;
+  while( *p != '/' ) {
+    *s = *p;
+    p++; s++;
+  }
+  *s = '\0';
+  server = strtok( server, ":" );
+  port = strtok( NULL, ":" );
+  if( port == NULL ) {
+    port = malloc( 3 );
+    strcpy( port, "80" );
+  }
+  *path = p;
+  printf("%s\n%s\n%s\n", server, port, *path);
+    
+  if( getaddrinfo( server, port, &hints, &res ) != 0 )
+    error( "getaddrinfo failed!", ERROR_GAI );
+  return res;
 }
+
 int main( int argc, char *argv[] ) {
   struct sockaddr_in server, client;
-  struct addrinfo web_server; hints, *res; /* For use with getaddrinfo */
-
+  struct addrinfo web_server;
   int sockfd, s;
   int port_no;
   char request[BUFFER_SIZE];
+  char *request_line, *path;
   socklen_t size;
-  pid_t child_pid;
 
   if( argc < 2 )
     error("Usage: myproxy <port>", ERROR_USAGE );
+  
+  port_no = atoi( argv[1] );
 
   if( (sockfd = socket( PF_INET, SOCK_STREAM, 0 )) < 0 )
     error("Could not create socket!", ERROR_SOCKET);
@@ -82,7 +128,13 @@ int main( int argc, char *argv[] ) {
     printf("Connected\n");
     bzero( request, BUFFER_SIZE );
     recv( s, request, BUFFER_SIZE, 0 );
-    printf("%s\n",request);
+    request_line = get_request_line( request );
+    printf("%s\n",request_line);
+    request_line = strtok( request_line, " " );
+    if( strcmp( request_line, "GET" ) != 0 )
+      error("Not get", ERROR_MALFORMED);
+    request_line = strtok( NULL, " " );
+    web_server = parse_url( request_line, &path );
     close( s );
  
   }
