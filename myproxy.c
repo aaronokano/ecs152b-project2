@@ -9,15 +9,21 @@
 #include <fcntl.h>
 
 #define BUFFER_SIZE 65536
+#define ERROR_MSG_SIZE 256
 
-#define ERROR_USAGE  1
-#define ERROR_SOCKET 2
-#define ERROR_BIND   3
-#define ERROR_LISTEN 4
-#define ERROR_PIPE   5
-#define ERROR_FORK   6
-#define ERROR_GAI    7
+#define NON_FATAL_ERROR -1
+#define ERROR_USAGE     1
+#define ERROR_SOCKET    2
+#define ERROR_BIND      3
+#define ERROR_LISTEN    4
+#define ERROR_PIPE      5
+#define ERROR_FORK      6
+#define ERROR_GAI       7
 #define ERROR_MALFORMED 8
+#define ERROR_REQSIZE   9
+
+char error_msg[ERROR_MSG_SIZE];
+int error_code;
 
 /* Generic print error and quit */
 void error( const char *msg, int code ) {
@@ -25,15 +31,44 @@ void error( const char *msg, int code ) {
   exit( code );
 }
 
-char *get_request_line( char *request ) {
-  char *request_line;
-  int req_line_len;
-  if( (req_line_len = strcspn( request, "\r\n" )) == strlen( request ) )
-    error( "Improper HTTP request!", ERROR_MALFORMED );
-  request_line = (char *) malloc( req_line_len + 1 );
-  bzero( request_line, req_line_len + 1 );
-  memcpy( request_line, request, req_line_len );
-  return request_line;
+/* Call this for non-fatal error */
+void nf_error( char *msg, int code ) {
+  strcpy( error_msg, msg );
+  error_code = code;
+}
+
+void send_error_to_client( int sockfd ) {
+  char msg[512];
+  bzero( msg, 512 );
+  char reason[32];
+  switch( error_code ) {
+    case 400:
+      strcpy( reason, "BAD REQUEST" );
+      break;
+    case 501:
+      strcpy( reason, "NOT IMPLEMENTED" );
+      break;
+    case 503:
+      strcpy( reason, "SERVICE UNAVAILABLE" );
+      break;
+    default:
+      strcpy( reason, "BROKEN" );
+      break;
+  }
+  snprintf( msg, 512, "HTTP/1.0 %d %s\r\n\r\n%s", 
+      error_code, reason, error_msg );
+  send( sockfd, msg, strlen( msg ), 0 );
+}
+
+char *get_line( char *request ) {
+  char *line;
+  int line_len;
+  if( (line_len = strcspn( request, "\r\n" )) == strlen( request ) )
+    return NULL;
+  line = (char *) malloc( line_len + 1 );
+  bzero( line, line_len + 1 );
+  memcpy( line, request, line_len );
+  return line;
 }
 
 struct addrinfo *parse_url( char *url, char **path ) {
@@ -56,10 +91,14 @@ struct addrinfo *parse_url( char *url, char **path ) {
    * connection to the server as soon as a response is received */
 
   /* Skip over proto field */
-  if( (p = strchr( url, '/' )) == NULL)
-    error("Invalid URL!", ERROR_MALFORMED);
-  if( *(++p) != '/' )
-    error("Invalid URL!", ERROR_MALFORMED);
+  if( (p = strchr( url, '/' )) == NULL) {
+    nf_error( "Invalid request!", 400 );
+    return NULL;
+  }
+  if( *(++p) != '/' ) {
+    nf_error( "Invalid request!", 400 );
+    return NULL;
+  }
   p++;
   server = (char*)malloc( strcspn( p, "/" ) + 1 );
   s = server;
@@ -75,20 +114,53 @@ struct addrinfo *parse_url( char *url, char **path ) {
     strcpy( port, "80" );
   }
   *path = p;
-  printf("%s\n%s\n%s\n", server, port, *path);
+  //printf("%s\n%s\n%s\n", server, port, *path);
     
-  if( getaddrinfo( server, port, &hints, &res ) != 0 )
-    error( "getaddrinfo failed!", ERROR_GAI );
+  if( getaddrinfo( server, port, &hints, &res ) != 0 ) {
+    nf_error( "Could not get address info", 400 );
+    free( server );
+    return NULL;
+  }
+  free( server );
   return res;
+}
+
+int parse( char *request, char *new_req ) {
+  char *line, *path;
+  struct addrinfo *web_server;
+  char *p, *new_req_p = new_req;
+
+  /* Grab just Request-line field */
+  if( (line = get_line( request )) == NULL ) {
+    nf_error( "No Request-line present", 400 );
+    return NON_FATAL_ERROR;
+  }
+  printf("%s\n",line);
+  p = strtok( line, " " );
+  if( strcmp( p, "GET" ) != 0 ) {
+    nf_error( "Not a GET request", 501 );
+    return NON_FATAL_ERROR;
+  }
+  p = strtok( NULL, " " );
+  if( (web_server = parse_url( p, &path )) == NULL ) {
+    free( line );
+    return NON_FATAL_ERROR;
+  }
+  free( line );
+  /* Pack the new request with the information */
+  new_req_p += sprintf( new_req_p, "GET %s HTTP/1.0\r\n", path );
+  printf("%s\n",new_req);
+
+  return 0;
 }
 
 int main( int argc, char *argv[] ) {
   struct sockaddr_in server, client;
-  struct addrinfo web_server;
+  int web_server_fd;
   int sockfd, s;
   int port_no;
   char request[BUFFER_SIZE];
-  char *request_line, *path;
+  char new_req[BUFFER_SIZE];
   socklen_t size;
 
   if( argc < 2 )
@@ -127,14 +199,16 @@ int main( int argc, char *argv[] ) {
     }
     printf("Connected\n");
     bzero( request, BUFFER_SIZE );
-    recv( s, request, BUFFER_SIZE, 0 );
-    request_line = get_request_line( request );
-    printf("%s\n",request_line);
-    request_line = strtok( request_line, " " );
-    if( strcmp( request_line, "GET" ) != 0 )
-      error("Not get", ERROR_MALFORMED);
-    request_line = strtok( NULL, " " );
-    web_server = parse_url( request_line, &path );
+    /* Indicates HTTP request exceeds 65535 bytes */
+    if( recv( s, request, BUFFER_SIZE, 0 ) == BUFFER_SIZE ) {
+      nf_error( "Request too big", 400 );
+      send_error_to_client(s);
+    }
+    else {
+      /* Parse & pack */
+      if( (web_server_fd = parse( request, new_req )) == NON_FATAL_ERROR )
+        send_error_to_client(s);
+    }
     close( s );
  
   }
