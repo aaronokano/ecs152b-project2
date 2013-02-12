@@ -10,17 +10,13 @@
 
 #define BUFFER_SIZE 65536
 #define ERROR_MSG_SIZE 256
+#define NUM_HEADERS 5
 
 #define NON_FATAL_ERROR -1
 #define ERROR_USAGE     1
 #define ERROR_SOCKET    2
 #define ERROR_BIND      3
 #define ERROR_LISTEN    4
-#define ERROR_PIPE      5
-#define ERROR_FORK      6
-#define ERROR_GAI       7
-#define ERROR_MALFORMED 8
-#define ERROR_REQSIZE   9
 
 char error_msg[ERROR_MSG_SIZE];
 int error_code;
@@ -37,6 +33,7 @@ void nf_error( char *msg, int code ) {
   error_code = code;
 }
 
+/* Use actual HTTP error codes */
 void send_error_to_client( int sockfd ) {
   char msg[512];
   bzero( msg, 512 );
@@ -55,7 +52,7 @@ void send_error_to_client( int sockfd ) {
       strcpy( reason, "BROKEN" );
       break;
   }
-  snprintf( msg, 512, "HTTP/1.0 %d %s\r\n\r\n%s", 
+  snprintf( msg, 512, "HTTP/1.0 %d %s\r\n\r\n%s\r\n", 
       error_code, reason, error_msg );
   send( sockfd, msg, strlen( msg ), 0 );
 }
@@ -130,19 +127,20 @@ struct addrinfo *parse_url( char *url, char **path ) {
   return res;
 }
 
+/* Check if Request-header line is a valid HTTP/1.0 header as specified in RFC
+ * 1945. Return 1 if it is and 0 otherwise */
 int valid_header( char *line ) {
+  int i;
   char *validate = strdup( line );
+  char *header[NUM_HEADERS] = { "Authorization", "From", "If-Modified-Since",
+    "Referer", "User-Agent" };
   strtok( validate, ":" );
-  if( strcmp( validate, "Authorization" ) == 0 )
-    return 1;
-  if( strcmp( validate, "From" ) == 0 )
-    return 1;
-  if( strcmp( validate, "If-Modified-Since" ) == 0 )
-    return 1;
-  if( strcmp( validate, "Referer" ) == 0 )
-    return 1;
-  if( strcmp( validate, "User-Agent" ) == 0 )
-    return 1;
+  for( i = 0; i < NUM_HEADERS; i++ ) {
+    if( strcmp( validate, header[i] ) == 0 ) {
+      free( validate );
+      return 1;
+    }
+  }
   return 0;
 }
 
@@ -173,17 +171,17 @@ int parse( char *request, char *new_req ) {
   /* Pack the new request with the information */
   new_req_p += sprintf( new_req_p, "GET %s HTTP/1.0\r\n", path );
   request = next_line( request );
+  /* Grab all the valid headers */
   while( 1 ) {
     line = get_line( request );
-    request = next_line( request );
     if( strcmp( line, "" ) == 0 )
       break;
     if( valid_header( line ) )
       new_req_p += sprintf( new_req_p, "%s\r\n", line );
     free( line );
+    request = next_line( request );
   }
   sprintf( new_req_p, "\r\n" );
-  printf("%s\n",new_req);
   if( (sockfd = socket( PF_INET, SOCK_STREAM, 0 )) < 0 )
     error("failed to get socket!", 3);
 
@@ -200,6 +198,7 @@ int main( int argc, char *argv[] ) {
   int port_no;
   char request[BUFFER_SIZE];
   char new_req[BUFFER_SIZE];
+  char *recv_p;
   socklen_t size;
 
   if( argc < 2 )
@@ -238,17 +237,26 @@ int main( int argc, char *argv[] ) {
     }
     printf("Connected\n");
     bzero( request, BUFFER_SIZE );
+    recv_p = request;
     /* Indicates HTTP request exceeds 65535 bytes */
-    if( recv( s, request, BUFFER_SIZE, 0 ) == BUFFER_SIZE ) {
-      nf_error( "Request too big", 400 );
-      send_error_to_client(s);
+    while( recv_p += recv( s, recv_p, BUFFER_SIZE - (recv_p - request), 0 ) ) {
+      if( recv_p - request == BUFFER_SIZE ) {
+        nf_error( "Request too big", 400 );
+        send_error_to_client(s);
+        break;
+      }
+      if( recv_p - request > 4 )
+        if( strcmp( recv_p - 4, "\r\n\r\n" ) == 0 || 
+            strcmp( recv_p - 2, "\n\n" ) == 0 )
+          break;
     }
-    else {
+    if( recv_p - request != BUFFER_SIZE ) {
       /* Parse & pack */
       if( (web_server_fd = parse( request, new_req )) == NON_FATAL_ERROR )
         send_error_to_client(s);
     }
-    printf("Connected!\n");
+    printf("%s\n",new_req);
+    printf("Connected to web server.\n");
     close( s );
  
   }
