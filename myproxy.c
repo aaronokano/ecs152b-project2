@@ -71,6 +71,11 @@ char *get_line( char *request ) {
   return line;
 }
 
+char *next_line( char *request ) {
+  request = strchr( request, '\n' );
+  return ++request;
+}
+
 struct addrinfo *parse_url( char *url, char **path ) {
   /* url should contain a URL and the absolute path should be returned in
    * path. The return value of the function will be an addrinfo struct with
@@ -125,8 +130,27 @@ struct addrinfo *parse_url( char *url, char **path ) {
   return res;
 }
 
+int valid_header( char *line ) {
+  char *validate = strdup( line );
+  strtok( validate, ":" );
+  if( strcmp( validate, "Authorization" ) == 0 )
+    return 1;
+  if( strcmp( validate, "From" ) == 0 )
+    return 1;
+  if( strcmp( validate, "If-Modified-Since" ) == 0 )
+    return 1;
+  if( strcmp( validate, "Referer" ) == 0 )
+    return 1;
+  if( strcmp( validate, "User-Agent" ) == 0 )
+    return 1;
+  return 0;
+}
+
+/* Parse request and pack a string with an HTTP/1.0 compatible request. Also,
+ * establish connection to web server */
 int parse( char *request, char *new_req ) {
   char *line, *path;
+  int sockfd;
   struct addrinfo *web_server;
   char *p, *new_req_p = new_req;
 
@@ -135,7 +159,6 @@ int parse( char *request, char *new_req ) {
     nf_error( "No Request-line present", 400 );
     return NON_FATAL_ERROR;
   }
-  printf("%s\n",line);
   p = strtok( line, " " );
   if( strcmp( p, "GET" ) != 0 ) {
     nf_error( "Not a GET request", 501 );
@@ -149,7 +172,23 @@ int parse( char *request, char *new_req ) {
   free( line );
   /* Pack the new request with the information */
   new_req_p += sprintf( new_req_p, "GET %s HTTP/1.0\r\n", path );
+  request = next_line( request );
+  while( 1 ) {
+    line = get_line( request );
+    request = next_line( request );
+    if( strcmp( line, "" ) == 0 )
+      break;
+    if( valid_header( line ) )
+      new_req_p += sprintf( new_req_p, "%s\r\n", line );
+    free( line );
+  }
+  sprintf( new_req_p, "\r\n" );
   printf("%s\n",new_req);
+  if( (sockfd = socket( PF_INET, SOCK_STREAM, 0 )) < 0 )
+    error("failed to get socket!", 3);
+
+  if( connect( sockfd, web_server->ai_addr, web_server->ai_addrlen) != 0 )
+    error("failed to connect to server!", 4);
 
   return 0;
 }
@@ -209,6 +248,7 @@ int main( int argc, char *argv[] ) {
       if( (web_server_fd = parse( request, new_req )) == NON_FATAL_ERROR )
         send_error_to_client(s);
     }
+    printf("Connected!\n");
     close( s );
  
   }
