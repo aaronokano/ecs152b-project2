@@ -197,8 +197,10 @@ int main( int argc, char *argv[] ) {
   int web_server_fd;
   int sockfd, s;
   int port_no;
+  int read;
   char request[BUFFER_SIZE];
   char new_req[BUFFER_SIZE];
+  char data[BUFFER_SIZE];
   char *recv_p;
   socklen_t size;
 
@@ -259,15 +261,15 @@ int main( int argc, char *argv[] ) {
         continue;
       }
       printf("Connected to web server.\n");
-      /* YOUR CODE GOES HERE, JASON! It will look something like
-      *  send( web_server_fd, new_req, strlen( new_req ), 0 )
-      *  while( 1 ) {
-      *    recv( web_server_fd, ... )
-      *    send( s, ... )
-      *    if( some reason to stop receiving )
-      *      break
-      *  } 
-      */
+        send( web_server_fd, request, strlen( request ), 0 );//Possibly request?
+        while( 1 ) {
+          read = recv( web_server_fd, data, BUFFER_SIZE, 0);
+          send( s, data, strlen(data), 0 );
+printf("Read: %d\n", read);
+printf("data: %s\n\n" , data);
+          if( read < BUFFER_SIZE)
+            break;
+        } 
     }
     close( s );
  
