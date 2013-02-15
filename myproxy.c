@@ -145,7 +145,8 @@ int valid_header( char *line ) {
 }
 
 /* Parse request and pack a string with an HTTP/1.0 compatible request. Also,
- * establish connection to web server */
+ * establish connection to web server. Return value is the socket fd for that
+ * connection */
 int parse( char *request, char *new_req ) {
   char *line, *path;
   int sockfd;
@@ -188,7 +189,7 @@ int parse( char *request, char *new_req ) {
   if( connect( sockfd, web_server->ai_addr, web_server->ai_addrlen) != 0 )
     error("failed to connect to server!", 4);
 
-  return 0;
+  return sockfd;
 }
 
 int main( int argc, char *argv[] ) {
@@ -251,12 +252,23 @@ int main( int argc, char *argv[] ) {
           break;
     }
     if( recv_p - request != BUFFER_SIZE ) {
-      /* Parse & pack */
-      if( (web_server_fd = parse( request, new_req )) == NON_FATAL_ERROR )
+      /* Parse, pack, and get socket fd for web server connection */
+      if( (web_server_fd = parse( request, new_req )) == NON_FATAL_ERROR ) {
         send_error_to_client(s);
+        close( s );
+        continue;
+      }
+      printf("Connected to web server.\n");
+      /* YOUR CODE GOES HERE, JASON! It will look something like
+      *  send( web_server_fd, new_req, strlen( new_req ), 0 )
+      *  while( 1 ) {
+      *    recv( web_server_fd, ... )
+      *    send( s, ... )
+      *    if( some reason to stop receiving )
+      *      break
+      *  } 
+      */
     }
-    printf("%s\n",new_req);
-    printf("Connected to web server.\n");
     close( s );
  
   }
