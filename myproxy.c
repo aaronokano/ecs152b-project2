@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <fcntl.h>
+#include <errno.h>
 
 #define BUFFER_SIZE 65536
 #define ERROR_MSG_SIZE 256
@@ -198,10 +199,13 @@ int main( int argc, char *argv[] ) {
   int sockfd, s;
   int port_no;
   int read;
+  int message_length;
   char request[BUFFER_SIZE];
   char new_req[BUFFER_SIZE];
   char data[BUFFER_SIZE];
   char *recv_p;
+  char *t1, *t2;
+  char temp[128];
   socklen_t size;
 
   if( argc < 2 )
@@ -261,14 +265,27 @@ int main( int argc, char *argv[] ) {
         continue;
       }
       printf("Connected to web server.\n");
-        send( web_server_fd, request, strlen( request ), 0 );//Possibly request?
+      send( web_server_fd, request, strlen( request ), 0 );
+      read = recv( web_server_fd, data, BUFFER_SIZE, 0);
+      send( s, data, strlen(data), 0);
+      printf("Data sent to browser\n");
+        //Just read header now parse for content-length
+       /* t1 = strtok(data, "\n");
+        while(t1 != NULL) {
+          strcpy(temp, t1);
+          t2 = strtok(temp, " ");
+          printf("T2 : %s\n", t2);
+          t1 = strtok(NULL, "\n");
+        }*/
+        //printf("Data: \n\n%s\n", data);
         while( 1 ) {
           read = recv( web_server_fd, data, BUFFER_SIZE, 0);
-          send( s, data, strlen(data), 0 );
-printf("Read: %d\n", read);
-printf("data: %s\n\n" , data);
-          if( read < BUFFER_SIZE)
+          if( read <= 0) {
+            printf("Errno : %d\n", errno);
             break;
+          }
+printf("Looped: %d\n", read);
+          send( s, data, strlen(data), 0);
         } 
     }
     close( s );
