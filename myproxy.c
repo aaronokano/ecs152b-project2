@@ -83,7 +83,7 @@ struct addrinfo *parse_url( char *url, char **path ) {
   char *server, *s;
   *path = malloc( 65535 );
   char *port;
-  
+
   bzero( (char *) &hints, sizeof( hints ) );
   hints.ai_socktype = SOCK_STREAM;
   hints.ai_family = PF_INET;
@@ -118,7 +118,7 @@ struct addrinfo *parse_url( char *url, char **path ) {
   }
   *path = p;
   //printf("%s\n%s\n%s\n", server, port, *path);
-    
+
   if( getaddrinfo( server, port, &hints, &res ) != 0 ) {
     nf_error( "Could not get address info", 400 );
     free( server );
@@ -210,7 +210,7 @@ int main( int argc, char *argv[] ) {
 
   if( argc < 2 )
     error("Usage: myproxy <port>", ERROR_USAGE );
-  
+
   port_no = atoi( argv[1] );
 
   if( (sockfd = socket( PF_INET, SOCK_STREAM, 0 )) < 0 )
@@ -269,28 +269,30 @@ int main( int argc, char *argv[] ) {
       read = recv( web_server_fd, data, BUFFER_SIZE, 0);
       send( s, data, strlen(data), 0);
       printf("Data sent to browser\n");
-        //Just read header now parse for content-length
-       /* t1 = strtok(data, "\n");
-        while(t1 != NULL) {
-          strcpy(temp, t1);
-          t2 = strtok(temp, " ");
-          printf("T2 : %s\n", t2);
-          t1 = strtok(NULL, "\n");
-        }*/
-        //printf("Data: \n\n%s\n", data);
-        while( 1 ) {
-          read = recv( web_server_fd, data, BUFFER_SIZE, 0);
-          if( read <= 0) {
-            printf("Errno : %d\n", errno);
-            break;
-          }
-printf("Looped: %d\n", read);
-          send( s, data, strlen(data), 0);
-        } 
+      //Just read header now parse for content-length
+      /* t1 = strtok(data, "\n");
+         while(t1 != NULL) {
+         strcpy(temp, t1);
+         t2 = strtok(temp, " ");
+         printf("T2 : %s\n", t2);
+         t1 = strtok(NULL, "\n");
+         }*/
+      //printf("Data: \n\n%s\n", data);
+      while( 1 ) {
+        read = recv( web_server_fd, data, BUFFER_SIZE, 0);
+        if( read <= 0) {
+          printf("Errno : %d\n", errno);
+          break;
+        }
+        printf("Looped: %d\n", read);
+        send( s, data, strlen(data), 0);
+      }
+      printf("Outside of loop\n");
     }
     close( s );
- 
+
   }
+  printf("Outside of main loop - should never happen\n");
 
   return 0;
 }
