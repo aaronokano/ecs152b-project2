@@ -265,7 +265,7 @@ int main( int argc, char *argv[] ) {
         continue;
       }
       printf("Connected to web server.\n");
-      send( web_server_fd, request, strlen( request ), 0 );
+      send( web_server_fd, new_req, strlen( new_req ), 0 );
       read = recv( web_server_fd, data, BUFFER_SIZE, 0);
       send( s, data, strlen(data), 0);
       printf("Data sent to browser\n");
