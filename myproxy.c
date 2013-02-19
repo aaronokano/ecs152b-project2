@@ -189,8 +189,34 @@ int parse( char *request, char *new_req ) {
 
   if( connect( sockfd, web_server->ai_addr, web_server->ai_addrlen) != 0 )
     error("failed to connect to server!", 4);
+  freeaddrinfo( web_server );
 
   return sockfd;
+}
+
+int get_request( char *request, int client, char *pos, int length ) {
+  int read;
+  read = recv( client, pos, length, 0 );
+  printf("%d\n",read);
+
+  if( read == 0 ) {
+    printf("Timeout\n");
+    return 0;
+  }
+  else if( read == length ) {
+    nf_error( "Request too big", 400 );
+    send_error_to_client( client );
+    return 0;
+  }
+  else if( read == -1 ) {
+    perror("read");
+    return 0;
+  }
+  else if( strstr( request, "\r\n\r\n" ) == NULL && 
+      strstr( request, "\n\n" ) == NULL ) {
+    return get_request( request, client, pos + read, length - strlen(request) );
+  }
+  return 1;
 }
 
 int main( int argc, char *argv[] ) {
@@ -199,13 +225,9 @@ int main( int argc, char *argv[] ) {
   int sockfd, s;
   int port_no;
   int read;
-  int message_length;
   char request[BUFFER_SIZE];
   char new_req[BUFFER_SIZE];
   char data[BUFFER_SIZE];
-  char *recv_p;
-  char *t1, *t2;
-  char temp[128];
   socklen_t size;
 
   if( argc < 2 )
@@ -220,6 +242,14 @@ int main( int argc, char *argv[] ) {
   if(setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1) {
     perror("setsockopt");
     exit(1);
+  }
+  struct timeval tv;
+  tv.tv_sec = 5;
+  tv.tv_usec = 0;
+  if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv,  sizeof tv))
+  {
+    perror("setsockopt");
+    return -1;
   }
 
   /* Do standard binding actions */
@@ -244,50 +274,25 @@ int main( int argc, char *argv[] ) {
     }
     printf("Connected\n");
     bzero( request, BUFFER_SIZE );
-    recv_p = request;
-    /* Indicates HTTP request exceeds 65535 bytes */
-    while( recv_p += recv( s, recv_p, BUFFER_SIZE - (recv_p - request), 0 ) ) {
-      if( recv_p - request == BUFFER_SIZE ) {
-        nf_error( "Request too big", 400 );
-        send_error_to_client(s);
-        break;
-      }
-      if( recv_p - request > 4 )
-        if( strcmp( recv_p - 4, "\r\n\r\n" ) == 0 || 
-            strcmp( recv_p - 2, "\n\n" ) == 0 )
-          break;
-    }
-    if( recv_p - request != BUFFER_SIZE ) {
+    if( get_request( request, s, request, BUFFER_SIZE ) == 1 ) {
       /* Parse, pack, and get socket fd for web server connection */
       if( (web_server_fd = parse( request, new_req )) == NON_FATAL_ERROR ) {
         send_error_to_client(s);
         close( s );
         continue;
       }
+      printf("%s\n",new_req);
       printf("Connected to web server.\n");
       send( web_server_fd, new_req, strlen( new_req ), 0 );
-      read = recv( web_server_fd, data, BUFFER_SIZE, 0);
-      send( s, data, strlen(data), 0);
-      printf("Data sent to browser\n");
-      //Just read header now parse for content-length
-      /* t1 = strtok(data, "\n");
-         while(t1 != NULL) {
-         strcpy(temp, t1);
-         t2 = strtok(temp, " ");
-         printf("T2 : %s\n", t2);
-         t1 = strtok(NULL, "\n");
-         }*/
-      //printf("Data: \n\n%s\n", data);
       while( 1 ) {
-        read = recv( web_server_fd, data, BUFFER_SIZE, 0);
-        if( read <= 0) {
-          printf("Errno : %d\n", errno);
+        read = recv( web_server_fd, data, BUFFER_SIZE, 0 );
+        if( read <= 0 ) {
           break;
         }
-        printf("Looped: %d\n", read);
-        send( s, data, strlen(data), 0);
+        //printf("Looped: %d\n", read);
+        if( send( s, data, read, MSG_NOSIGNAL) == -1 )
+          perror("send");
       }
-      printf("Outside of loop\n");
     }
     close( s );
 
