@@ -111,7 +111,7 @@ struct addrinfo *parse_url( char *url, char **path ) {
   }
   *s = '\0';
   server = strtok( server, ":" );
-  port = strdup( strtok( NULL, ":" ) );
+  port = strtok( NULL, ":" );
   if( port == NULL ) {
     port = malloc( 3 );
     strcpy( port, "80" );
@@ -122,11 +122,9 @@ struct addrinfo *parse_url( char *url, char **path ) {
   if( getaddrinfo( server, port, &hints, &res ) != 0 ) {
     nf_error( "Could not get address info", 400 );
     free( server );
-    free( port );
     return NULL;
   }
   free( server );
-  free( port );
   return res;
 }
 
