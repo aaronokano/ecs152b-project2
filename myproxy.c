@@ -194,6 +194,9 @@ int parse( char *request, char *new_req ) {
   return sockfd;
 }
 
+/* Fetch the request. Takes the request array, the client fd, a pointer to the
+ * location in the request array to read into, and the remaining length of the
+ * array. This is a recursive function */
 int get_request( char *request, int client, char *pos, int length ) {
   int read;
   read = recv( client, pos, length, 0 );
@@ -203,17 +206,21 @@ int get_request( char *request, int client, char *pos, int length ) {
     printf("Timeout\n");
     return 0;
   }
+  /* If read == length, then the whole buffer is full and we should ignore */
   else if( read == length ) {
     nf_error( "Request too big", 400 );
     send_error_to_client( client );
     return 0;
   }
+  /* If something goes wrong */
   else if( read == -1 ) {
     perror("read");
     return 0;
   }
+  /* Check if the end of the packet has been read */
   else if( strstr( request, "\r\n\r\n" ) == NULL && 
       strstr( request, "\n\n" ) == NULL ) {
+    /* Recurse if there could be more to read */
     return get_request( request, client, pos + read, length - strlen(request) );
   }
   return 1;
@@ -290,6 +297,8 @@ int main( int argc, char *argv[] ) {
           break;
         }
         //printf("Looped: %d\n", read);
+        /* Handles the case where browser is directed elsewhere while sending
+         * data to it */
         if( send( s, data, read, MSG_NOSIGNAL) == -1 )
           perror("send");
       }
