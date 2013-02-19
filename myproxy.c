@@ -184,11 +184,17 @@ int parse( char *request, char *new_req ) {
     request = next_line( request );
   }
   sprintf( new_req_p, "\r\n" );
-  if( (sockfd = socket( PF_INET, SOCK_STREAM, 0 )) < 0 )
-    error("failed to get socket!", 3);
+  if( (sockfd = socket( PF_INET, SOCK_STREAM, 0 )) < 0 ) {
+    nf_error("failed to get socket!", 503);
+    freeaddrinfo( web_server );
+    return NON_FATAL_ERROR;
+  }
 
-  if( connect( sockfd, web_server->ai_addr, web_server->ai_addrlen) != 0 )
-    error("failed to connect to server!", 4);
+  if( connect( sockfd, web_server->ai_addr, web_server->ai_addrlen) != 0 ) {
+    nf_error("failed to connect to server!", 503);
+    freeaddrinfo( web_server );
+    return NON_FATAL_ERROR;
+  }
   freeaddrinfo( web_server );
 
   return sockfd;
