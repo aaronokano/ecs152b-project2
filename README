@@ -1,0 +1,23 @@
+Authors: Aaron Okano, Jason Wong
+
+Implemented:
+  * GET requests work
+  * Non-GET requests return error in form of HTTP response
+  * Malformed requests return error in form of HTTP response
+  * Requests larger than 65535 bytes return an error in an HTTP response
+  * Requests are parsed to remove headers not present in RFC 1945
+  * Program quits on accept, bind, socket, or listen errors
+  * Proxy functions through netcat, telnet, or browser
+  * Images are loaded (albeit, rather slowly)
+
+Not implemented:
+  * Nothing
+
+Issues:
+  * Webpages with many images will take an extremely long amount of time to
+    load. Expect delays as timeouts will take a while.
+  * Many pages return a 403 Forbidden error or do not redirect properly. This
+    is simply not implemented in the proxy (and not required anyway)
+
+Sources:
+  * RFC 1945

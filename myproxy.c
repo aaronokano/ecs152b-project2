@@ -254,14 +254,6 @@ int main( int argc, char *argv[] ) {
     perror("setsockopt");
     exit(1);
   }
-  struct timeval tv;
-  tv.tv_sec = 5;
-  tv.tv_usec = 0;
-  if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv,  sizeof tv))
-  {
-    perror("setsockopt");
-    return -1;
-  }
 
   /* Do standard binding actions */
   bzero( (char *) &server, sizeof( server ) );
@@ -275,15 +267,15 @@ int main( int argc, char *argv[] ) {
   if( listen( sockfd, 5 ) == -1 )
     error("listen failed!", ERROR_LISTEN);
 
+  printf("Waiting for connection...\n");
   while( 1 ) {
     /* Repeat while server is running */
-    printf("Waiting for connection...\n");
     size = sizeof(client);
     if( (s = accept( sockfd, (struct sockaddr *) &client, &size )) == -1 ) {
-      perror("accept failed");
+      error("accept failed", 4);
       continue;
     }
-    printf("Connected\n");
+    printf("Connected.\n");
     bzero( request, BUFFER_SIZE );
     if( get_request( request, s, request, BUFFER_SIZE ) == 1 ) {
       /* Parse, pack, and get socket fd for web server connection */
@@ -306,7 +298,7 @@ int main( int argc, char *argv[] ) {
       }
     }
     close( s );
-
+    printf("Waiting for connection...\n");
   }
 
   return 0;
