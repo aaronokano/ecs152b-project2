@@ -117,7 +117,6 @@ struct addrinfo *parse_url( char *url, char **path ) {
     strcpy( port, "80" );
   }
   *path = p;
-  //printf("%s\n%s\n%s\n", server, port, *path);
 
   if( getaddrinfo( server, port, &hints, &res ) != 0 ) {
     nf_error( "Could not get address info", 400 );
@@ -302,7 +301,6 @@ int main( int argc, char *argv[] ) {
         if( read <= 0 ) {
           break;
         }
-        //printf("Looped: %d\n", read);
         /* Handles the case where browser is directed elsewhere while sending
          * data to it */
         if( send( s, data, read, MSG_NOSIGNAL) == -1 )
@@ -312,7 +310,6 @@ int main( int argc, char *argv[] ) {
     close( s );
 
   }
-  printf("Outside of main loop - should never happen\n");
 
   return 0;
 }
