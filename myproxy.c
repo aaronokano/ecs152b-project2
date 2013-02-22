@@ -205,7 +205,6 @@ int parse( char *request, char *new_req ) {
 int get_request( char *request, int client, char *pos, int length ) {
   int read;
   read = recv( client, pos, length, 0 );
-  printf("%d\n",read);
 
   if( read == 0 ) {
     printf("Timeout\n");
@@ -293,7 +292,6 @@ int main( int argc, char *argv[] ) {
         close( s );
         continue;
       }
-      printf("%s\n",new_req);
       printf("Connected to web server.\n");
       send( web_server_fd, new_req, strlen( new_req ), 0 );
       while( 1 ) {
